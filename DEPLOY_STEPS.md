@@ -64,26 +64,22 @@ cd app
 ## ШАГ 3 — Генерация .env
 Собрать .env из трёх источников и положить в корень `app`:
 ```
-# генерим сами
-SECRET_KEY=<openssl rand -hex 32>
-POSTGRES_PASSWORD=<random>
+cat > /home/deploy/app/.env << EOF
+SECRET_KEY=${SECRET_KEY}
+POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 DEBUG=False
 
-# из домена
-DOMAIN=<домен>
-ALLOWED_HOSTS=<домен>
-CSRF_TRUSTED_ORIGINS=https://<домен>
-CORS_ALLOWED_ORIGINS=https://<домен>
+DOMAIN=${DOMAIN}
+ALLOWED_HOSTS=${DOMAIN}
+CSRF_TRUSTED_ORIGINS=https://${DOMAIN}
+CORS_ALLOWED_ORIGINS=https://${DOMAIN}
 
-# фикс / из шаблона юзера
 POSTGRES_USER=appuser
 POSTGRES_DB=appdb
-DATABASE_URL=postgres://appuser:<POSTGRES_PASSWORD>@db:5432/appdb
+DATABASE_URL=postgres://appuser:${POSTGRES_PASSWORD}@db:5432/appdb
 REDIS_URL=redis://redis:6379/0
+EOF
 
-# спец-переменные юзера (если есть)
-<KEY>=<VALUE>
-```
 ```bash
 chmod 600 .env
 ```
@@ -93,12 +89,63 @@ chmod 600 .env
 ## ШАГ 4 — Положить наш слой (Caddy)
 Скопировать в корень `app`:
 - `docker-compose.caddy.yml`
+
+services:
+  caddy:
+    image: caddy:2
+    restart: always
+    environment:
+      DOMAIN: ${DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - static_volume:/srv/static:ro
+      - media_volume:/srv/media:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+
+volumes:
+  static_volume:
+  media_volume:
+  caddy_data:
+  caddy_config:
+
 - `Caddyfile` (берёт ${DOMAIN} из .env)
 
----
+{$DOMAIN} {
+	handle_path /static/* {
+		root * /srv/static
+		file_server
+	}
+
+	handle_path /media/* {
+		root * /srv/media
+		file_server
+	}
+
+	reverse_proxy web:8000
+}
+---f
 
 ## ШАГ 5 — Запуск
 ```bash
+
+!!! ВАЖНО !!!
+sudo mkdir -p /etc/docker
+cat <<'EOF' | sudo tee /etc/docker/daemon.json
+{
+  "registry-mirrors": [
+    "https://mirror.gcr.io",
+    "https://dockerhub.timeweb.cloud"
+  ]
+}
+EOF
+sudo systemctl restart docker
+
 docker compose -f docker-compose.yml -f docker-compose.caddy.yml up -d --build
 ```
 (migrate + collectstatic отрабатывают в command приложения)
