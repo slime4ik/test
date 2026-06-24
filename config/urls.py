@@ -4,7 +4,7 @@ from django.urls import include, path
 
 
 def health(request):
-    return JsonResponse({"status": "okey", "version": "1"})
+    return JsonResponse({"status": "ОКЕЙ", "version": "228"})
 
 
 urlpatterns = [
